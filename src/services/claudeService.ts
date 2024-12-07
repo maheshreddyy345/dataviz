@@ -1,91 +1,30 @@
 import axios from 'axios';
 
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-
-interface ClaudeResponse {
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
+interface ChartData {
+  xAxis: string[];
+  yAxis: number[];
 }
 
-export const processTextWithClaude = async (text: string): Promise<{ xAxis: string[]; yAxis: number[] }> => {
+export const processTextWithClaude = async (text: string): Promise<ChartData> => {
   try {
-    const apiKey = process.env.REACT_APP_CLAUDE_API_KEY;
-    if (!apiKey) {
-      throw new Error('Claude API key not found. Please add REACT_APP_CLAUDE_API_KEY to your .env file');
-    }
-
-    console.log('Making API request to Claude...');
+    console.log('Making API request...');
     
-    const response = await axios.post<ClaudeResponse>(
-      CLAUDE_API_URL,
-      {
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 1024,
-        messages: [{
-          role: 'user',
-          content: `Extract numerical data from this text and format it as a visualization-ready JSON object.
-                   The JSON object should have exactly two fields:
-                   - xAxis: array of labels (strings)
-                   - yAxis: array of corresponding numbers
-                   Return ONLY the JSON object, nothing else.
-                   
-                   Text: ${text}`
-        }]
-      },
+    const response = await axios.post<ChartData>(
+      '/.netlify/functions/claude/process',
+      { text },
       {
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2024-02-29',
-          'Access-Control-Allow-Origin': '*'
+          'Content-Type': 'application/json'
         }
       }
     );
 
-    console.log('Received response from Claude:', response.status);
-    const content = response.data.content[0].text;
-    console.log('Raw response:', content);
-    
-    try {
-      // Find the JSON object in the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.error('No JSON object found in response');
-        throw new Error('No JSON object found in response');
-      }
-      
-      const data = JSON.parse(jsonMatch[0]);
-      console.log('Parsed data:', data);
-      
-      // Validate the data structure
-      if (!Array.isArray(data.xAxis) || !Array.isArray(data.yAxis)) {
-        console.error('Invalid data format:', data);
-        throw new Error('Invalid data format: xAxis and yAxis must be arrays');
-      }
-      
-      if (data.xAxis.length !== data.yAxis.length) {
-        console.error('Array length mismatch:', data);
-        throw new Error('Invalid data format: xAxis and yAxis must have the same length');
-      }
-      
-      return data;
-    } catch (parseError) {
-      console.error('Error parsing Claude response:', content);
-      console.error('Parse error details:', parseError);
-      throw new Error('Failed to parse data from Claude response');
-    }
+    console.log('Received response:', response.data);
+    return response.data;
   } catch (error) {
     console.error('API request error:', error);
     if (axios.isAxiosError(error)) {
-      console.error('API Error details:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        headers: error.response?.headers,
-        config: error.config
-      });
-      const errorMessage = error.response?.data?.error?.message || error.message;
+      const errorMessage = error.response?.data?.message || error.message;
       throw new Error(`API Error: ${errorMessage}`);
     }
     throw error;
