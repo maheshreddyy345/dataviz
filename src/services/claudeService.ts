@@ -16,6 +16,8 @@ export const processTextWithClaude = async (text: string): Promise<{ xAxis: stri
       throw new Error('Claude API key not found. Please add REACT_APP_CLAUDE_API_KEY to your .env file');
     }
 
+    console.log('Making API request to Claude...');
+    
     const response = await axios.post<ClaudeResponse>(
       CLAUDE_API_URL,
       {
@@ -36,44 +38,54 @@ export const processTextWithClaude = async (text: string): Promise<{ xAxis: stri
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'anthropic-version': '2024-02-29'
+          'anthropic-version': '2024-02-29',
+          'Access-Control-Allow-Origin': '*'
         }
       }
     );
 
+    console.log('Received response from Claude:', response.status);
     const content = response.data.content[0].text;
+    console.log('Raw response:', content);
     
     try {
       // Find the JSON object in the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
+        console.error('No JSON object found in response');
         throw new Error('No JSON object found in response');
       }
       
       const data = JSON.parse(jsonMatch[0]);
+      console.log('Parsed data:', data);
       
       // Validate the data structure
       if (!Array.isArray(data.xAxis) || !Array.isArray(data.yAxis)) {
+        console.error('Invalid data format:', data);
         throw new Error('Invalid data format: xAxis and yAxis must be arrays');
       }
       
       if (data.xAxis.length !== data.yAxis.length) {
+        console.error('Array length mismatch:', data);
         throw new Error('Invalid data format: xAxis and yAxis must have the same length');
       }
       
       return data;
     } catch (parseError) {
       console.error('Error parsing Claude response:', content);
+      console.error('Parse error details:', parseError);
       throw new Error('Failed to parse data from Claude response');
     }
   } catch (error) {
+    console.error('API request error:', error);
     if (axios.isAxiosError(error)) {
-      const errorMessage = error.response?.data?.error?.message || error.message;
       console.error('API Error details:', {
         status: error.response?.status,
         data: error.response?.data,
-        headers: error.response?.headers
+        headers: error.response?.headers,
+        config: error.config
       });
+      const errorMessage = error.response?.data?.error?.message || error.message;
       throw new Error(`API Error: ${errorMessage}`);
     }
     throw error;
