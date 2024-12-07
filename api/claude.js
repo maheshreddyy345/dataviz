@@ -11,7 +11,20 @@ app.use(express.json());
 
 router.post('/process', async (req, res) => {
   try {
+    console.log('Received request body:', req.body);
+    
+    if (!process.env.CLAUDE_API_KEY) {
+      console.error('CLAUDE_API_KEY is not set');
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
     const { text } = req.body;
+    if (!text) {
+      console.error('No text provided in request');
+      return res.status(400).json({ error: 'No text provided' });
+    }
+
+    console.log('Making request to Claude API...');
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       {
@@ -37,6 +50,13 @@ router.post('/process', async (req, res) => {
       }
     );
 
+    console.log('Received response from Claude:', response.status);
+    console.log('Response data:', JSON.stringify(response.data));
+
+    if (!response.data.content || !response.data.content[0]) {
+      throw new Error('Invalid response format from Claude API');
+    }
+
     const content = response.data.content[0].text;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     
@@ -45,13 +65,33 @@ router.post('/process', async (req, res) => {
     }
     
     const data = JSON.parse(jsonMatch[0]);
+    
+    if (!Array.isArray(data.xAxis) || !Array.isArray(data.yAxis)) {
+      throw new Error('Invalid data format: xAxis and yAxis must be arrays');
+    }
+
+    console.log('Successfully parsed data:', data);
     res.json(data);
   } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ 
-      error: 'API Error',
-      message: error.message,
-      details: error.response?.data
+    console.error('Error details:', error);
+    
+    if (axios.isAxiosError(error)) {
+      console.error('Axios error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        headers: error.response?.headers
+      });
+      
+      return res.status(error.response?.status || 500).json({
+        error: 'API Error',
+        message: error.response?.data?.error?.message || error.message,
+        details: error.response?.data
+      });
+    }
+
+    res.status(500).json({
+      error: 'Server Error',
+      message: error.message
     });
   }
 });
